@@ -12,15 +12,15 @@ from pa_agent.data.market_defaults import (
 
 DataSourceKind = Literal["mt5", "tradingview", "akshare", "eastmoney", "tushare", "yfinance"]
 
-# UI-visible sources only — ``eastmoney`` is config/programmatic, not listed here.
 DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
     ("mt5", "MT5"),
     ("tradingview", "TradingView"),
+    ("eastmoney", "东方财富"),
     ("tushare", "Tushare"),
 )
 
 _HIDDEN_KINDS: frozenset[DataSourceKind] = frozenset(
-    {"akshare", "eastmoney", "tushare", "yfinance"}
+    {"akshare", "yfinance"}
 )
 
 _DEFAULT_SYMBOLS: dict[DataSourceKind, str] = {

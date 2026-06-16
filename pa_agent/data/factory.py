@@ -10,7 +10,7 @@ from pa_agent.data.market_defaults import (
     GOLD_TV_SYMBOL,
 )
 
-DataSourceKind = Literal["mt5", "tradingview", "akshare", "eastmoney", "yfinance"]
+DataSourceKind = Literal["mt5", "tradingview", "akshare", "eastmoney", "tushare", "yfinance"]
 
 # UI-visible sources only — ``eastmoney`` is config/programmatic, not listed here.
 DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
@@ -19,7 +19,7 @@ DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
 )
 
 _HIDDEN_KINDS: frozenset[DataSourceKind] = frozenset(
-    {"akshare", "eastmoney", "yfinance"}
+    {"akshare", "eastmoney", "tushare", "yfinance"}
 )
 
 _DEFAULT_SYMBOLS: dict[DataSourceKind, str] = {
@@ -27,6 +27,7 @@ _DEFAULT_SYMBOLS: dict[DataSourceKind, str] = {
     "tradingview": GOLD_TV_SYMBOL,
     "akshare": A_SHARE_DEFAULT_SYMBOL,
     "eastmoney": A_SHARE_DEFAULT_SYMBOL,
+    "tushare": A_SHARE_DEFAULT_SYMBOL,
     "yfinance": "GC=F",
 }
 
@@ -54,6 +55,8 @@ def data_source_label(kind: str | None) -> str:
         return "东方财富"
     if normalized == "akshare":
         return "AkShare"
+    if normalized == "tushare":
+        return "Tushare"
     if normalized == "yfinance":
         return "YFinance"
     return "MT5"
@@ -78,6 +81,10 @@ def create_data_source(kind: str | None) -> DataSource:
         from pa_agent.data.akshare_source import AkShareSource
 
         return AkShareSource()
+    if normalized == "tushare":
+        from pa_agent.data.tushare_source import TushareSource
+
+        return TushareSource()
     if normalized == "yfinance":
         from pa_agent.data.yfinance_source import YFinanceSource
 

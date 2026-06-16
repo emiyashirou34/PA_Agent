@@ -30,6 +30,7 @@ ashare = [
     "akshare>=1.14",
     "baostock>=0.8",
     "curl_cffi>=0.13",
+    "tushare>=1.12",
 ]
 dev = [
     "pytest>=8",

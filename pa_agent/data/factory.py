@@ -16,6 +16,7 @@ DataSourceKind = Literal["mt5", "tradingview", "akshare", "eastmoney", "tushare"
 DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
     ("mt5", "MT5"),
     ("tradingview", "TradingView"),
+    ("tushare", "Tushare"),
 )
 
 _HIDDEN_KINDS: frozenset[DataSourceKind] = frozenset(

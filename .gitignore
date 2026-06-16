@@ -18,6 +18,7 @@ venv/
 # ── 密钥与本地配置（切勿提交）────────────────────────────────────────────────
 .env
 .env.*
+config/tushare_token.txt
 config/settings.json
 config/settings.local.json
 config/exception_state.json

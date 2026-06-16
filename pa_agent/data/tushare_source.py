@@ -107,9 +107,14 @@ class TushareSource(DataSource):
     """A-share K-line data via Tushare Pro.
 
     Token priority:
-        1. ``settings.json`` → ``provider.tushare_token``
+        1. ``config/tushare_token.txt``
         2. Environment variable ``TUSHARE_TOKEN``
         3. ``~/.tushare/token.txt``
+
+    Rate limits
+    -----------
+    - ``daily`` / ``index_daily``: up to 200 req/min (2000+ credits)
+    - ``stk_mins``: **1 req/min** — calls are sequential and throttled
     """
 
     def __init__(self) -> None:
@@ -118,6 +123,7 @@ class TushareSource(DataSource):
         self._connected: bool = False
         self._pro: Any = None  # tushare pro_api instance
         self._token: str = ""
+        self._minute_access_known: bool = False  # True once probed
         self._has_minute_access: bool = False  # 2000+ 积分才有分钟线
 
     # ── Token resolution ──────────────────────────────────────────────────────
@@ -183,29 +189,20 @@ class TushareSource(DataSource):
         self._connected = True
 
     def _pro_limit_test(self) -> None:
-        """Probe which APIs are available (cheap call to daily)."""
+        """Probe token validity with daily (cheap).
+
+        Does **not** call ``stk_mins`` to avoid triggering the 1 req/min rate limit.
+        Minute access is assumed available if daily works; the first actual minute
+        fetch will confirm and cache the result.
+        """
         try:
             df = self._pro.daily(ts_code="000001.SZ", start_date="20260101", end_date="20260110")
             if df is None or df.empty:
                 logger.warning("Tushare daily probe returned empty — token may be invalid")
-                self._has_minute_access = False
                 return
         except Exception as exc:
             logger.warning("Tushare daily probe failed: %s", exc)
-            self._has_minute_access = False
-            return
-
-        # Try minute API (requires 2000+ credits)
-        try:
-            df_min = self._pro.stk_mins(
-                ts_code="000001.SZ",
-                freq="1min",
-                start_date="2026-01-06 09:30:00",
-                end_date="2026-01-06 10:00:00",
-            )
-            self._has_minute_access = df_min is not None and not df_min.empty
-        except Exception:
-            self._has_minute_access = False
+            raise  # token invalid
 
     def disconnect(self) -> None:
         self._pro = None
@@ -217,8 +214,8 @@ class TushareSource(DataSource):
         return list(_PRESET_SYMBOLS)
 
     def supported_timeframes(self) -> list[str]:
-        # If no minute access, only daily
-        if not self._has_minute_access:
+        # If minute access is confirmed absent, only daily
+        if self._minute_access_known and not self._has_minute_access:
             return ["1d"]
         return list(_SUPPORTED_TIMEFRAMES)
 
@@ -228,7 +225,7 @@ class TushareSource(DataSource):
                 f"Unsupported timeframe: {timeframe!r}. "
                 f"Use one of {list(_SUPPORTED_TIMEFRAMES)}"
             )
-        if timeframe != "1d" and not self._has_minute_access:
+        if timeframe != "1d" and self._minute_access_known and not self._has_minute_access:
             raise ValueError(
                 f"Tushare 积分不足：分钟数据（{timeframe}）需要 2000+ 积分。"
                 f"请升级积分或切换到 1d 周期。"
@@ -394,9 +391,34 @@ class TushareSource(DataSource):
                 end_date=end_s,
             )
 
-        df = self._call_with_retries(f"stk_mins {code} {freq}", _pull)
+        try:
+            df = self._call_with_retries(f"stk_mins {code} {freq}", _pull)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "频率超限" in msg or "频次" in msg:
+                # Rate-limited — cache and fall back to daily only
+                self._minute_access_known = True
+                self._has_minute_access = True  # have access, just rate-limited
+                logger.warning("Tushare stk_mins rate limited; wait 60s before retry")
+                raise DataSourceTransientError(
+                    f"Tushare 分钟接口频率超限（1次/分钟），请等待后重试: {exc}"
+                ) from exc
+            if "权限" in msg or "积分" in msg or "not allowed" in msg:
+                self._minute_access_known = True
+                self._has_minute_access = False
+                logger.warning("Tushare stk_mins not available (积分不足2000)")
+                raise DataSourceTransientError(
+                    f"Tushare 分钟数据不可用（需2000+积分）: {exc}"
+                ) from exc
+            raise
+
         if df is None or df.empty:
             return []
+
+        # First successful minute fetch confirms 2000+ access
+        self._minute_access_known = True
+        self._has_minute_access = True
+
         norm = normalize_ohlcv_df(df, time_col="trade_time")
         if norm.empty:
             return []

@@ -260,6 +260,14 @@ def df_to_bars_asc(df: Any, *, time_col: str) -> list[dict[str, Any]]:
         lo = float(row["low"])
         c = float(row["close"])
         vol = float(row.get("volume", 0.0) or 0.0)
+        amt = float(row.get("amount", 0.0) or 0.0)
+        pct_raw = row.get("pct_chg")
+        pct = None
+        if pct_raw is not None:
+            try:
+                pct = float(pct_raw)
+            except (ValueError, TypeError):
+                pct = None
         rows.append(
             {
                 "ts_open": ts,
@@ -268,8 +276,8 @@ def df_to_bars_asc(df: Any, *, time_col: str) -> list[dict[str, Any]]:
                 "low": lo,
                 "close": c,
                 "volume": vol,
-                "pct_chg": None,
-                "amount": 0.0,
+                "pct_chg": pct,
+                "amount": amt,
             }
         )
     for i in range(1, len(rows)):
@@ -301,8 +309,12 @@ def normalize_ohlcv_df(df: Any, *, time_col: str) -> Any:
             rename[col] = "high"
         elif c in ("最低", "low", "Low"):
             rename[col] = "low"
-        elif c in ("成交量", "volume", "Volume"):
+        elif c in ("成交量", "volume", "Volume", "vol", "Vol"):
             rename[col] = "volume"
+        elif c in ("成交额", "成交金额", "amount", "Amount"):
+            rename[col] = "amount"
+        elif c in ("涨跌幅", "pct_chg", "pctChg", "change"):
+            rename[col] = "pct_chg"
     out = out.rename(columns=rename)
     drop_cols = [
         c
